@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package bootstrap;
+
+option go_package = "internal/bootstrap;bootstrap"; 
+
+message Peer {
+    string address = 1; // Address of the peer
+}
