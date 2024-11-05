@@ -7,8 +7,9 @@ Bootstrap Peer Server adalah aplikasi yang bertugas untuk mengelola daftar peer 
 - **Register Peer**: Peer baru dapat mendaftar ke server.
 - **Get All Peers**: Mengambil daftar semua peer yang terdaftar.
 - **Remove Peer**: Menghapus peer dari daftar ketika peer ingin menonaktifkan diri.
-- Membaca file json ketika pertama kali server dinyalakan
-- Menulis ke file json ketika server di-shutdown.
+- **Notify Shutdown Peer**: Broadcast ke seluruh peer jika ada peer yang mati.
+- **Notify New Peer**: Broadcast ke seluruh peer jika ada peer yang bergabung
+- Menggunkanan Badger database
 
 ## Struktur Folder
 
@@ -99,4 +100,4 @@ Ganti <peer_address> dengan alamat peer yang ingin dihapus.
 
 
 ## Lisensi
-GNU GPL License. Silakan lihat file LICENSE untuk rincian lebih lanjut.
+GNU GPL License. Silakan lihat file [LICENSE](./LICENSE) untuk rincian lebih lanjut.
