@@ -10,7 +10,7 @@ import (
 
 // PeerManager mengelola daftar peers dengan thread-safe.
 type PeerManager struct {
-	peers []Peer
+	peers []*Peer
 	db    *badger.DB
 	mu    sync.Mutex
 }
@@ -34,7 +34,7 @@ func (pm *PeerManager) RegisterPeer(peerAddress string) (bool, string) {
 	}
 
 	peer := Peer{Address: peerAddress}
-	pm.peers = append(pm.peers, peer)
+	pm.peers = append(pm.peers, &peer)
 
 	data, err := proto.Marshal(&peer)
 	if err != nil {
@@ -53,7 +53,7 @@ func (pm *PeerManager) RegisterPeer(peerAddress string) (bool, string) {
 }
 
 // GetAllPeers mengembalikan daftar semua peers.
-func (pm *PeerManager) GetAllPeers() []Peer {
+func (pm *PeerManager) GetAllPeers() []*Peer {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -85,7 +85,7 @@ func (pm *PeerManager) RemovePeer(peerAddress string) (bool, string) {
 }
 
 func (pm *PeerManager) loadPeers() error {
-	pm.peers = []Peer{}
+	pm.peers = []*Peer{}
 	// Iterasi seluruh record di Badger
 	err := pm.db.View(func(txn *badger.Txn) error {
 		iter := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -98,7 +98,7 @@ func (pm *PeerManager) loadPeers() error {
 				if err := proto.Unmarshal(val, &peer); err != nil {
 					return err
 				}
-				pm.peers = append(pm.peers, peer)
+				pm.peers = append(pm.peers, &peer)
 				return nil
 			})
 			if err != nil {
