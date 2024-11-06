@@ -51,31 +51,36 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	println(req.Type)
-	fmt.Println(req.Payload)
-
 	// Handle sesuai tipe request
 	switch req.Type {
 	case "REGISTER":
-		s.registerPeer(req.Payload.(string), conn)
+		s.registerPeer(req.Payload, conn)
 	case "GET_PEERS":
 		s.getAllPeers(conn)
 	case "REMOVE":
-		s.removePeer(req.Payload.(string), conn)
+		s.removePeer(req.Payload, conn)
 	default:
 		fmt.Println("Invalid request type")
 	}
 }
 
 // registerPeer menambahkan peer baru ke daftar.
-func (s *Server) registerPeer(peer string, conn net.Conn) {
-	success, msg := s.pm.RegisterPeer(peer)
+func (s *Server) registerPeer(peer []byte, conn net.Conn) {
+	var myPeer Peer
+
+	err := sonic.Unmarshal(peer, &myPeer)
+	if err != nil {
+		fmt.Println("Error decoding peer:", err)
+		return
+	}
+
+	success, msg := s.pm.RegisterPeer(myPeer.Address)
 	fmt.Fprintln(conn, msg)
 
 	if !success {
-		fmt.Println("Failed to register peer:", peer)
+		fmt.Println("Failed to register peer:", myPeer.Address)
 	} else {
-		s.broadcastPeers(peer, "register")
+		s.broadcastPeers(&myPeer, "register")
 	}
 }
 
@@ -90,33 +95,41 @@ func (s *Server) getAllPeers(conn net.Conn) {
 	conn.Write(append(data, '\n'))
 }
 
-func (s *Server) removePeer(peer string, conn net.Conn) {
-	success, msg := s.pm.RemovePeer(peer)
+func (s *Server) removePeer(peer []byte, conn net.Conn) {
+	var myPeer Peer
+
+	err := sonic.Unmarshal(peer, &myPeer)
+	if err != nil {
+		fmt.Println("Error decoding peer:", err)
+		return
+	}
+
+	success, msg := s.pm.RemovePeer(myPeer.Address)
 	fmt.Fprintln(conn, msg)
 
 	if !success {
-		fmt.Println("Failed to remove peer:", peer)
+		fmt.Println("Failed to remove peer:", myPeer.Address)
 	} else {
-		s.broadcastPeers(peer, "shutdown")
+		s.broadcastPeers(&myPeer, "shutdown")
 	}
 }
 
-func (s *Server) broadcastPeers(peerAddress, typeMsg string) {
+func (s *Server) broadcastPeers(peer *Peer, typeMsg string) {
 	s.pm.mu.Lock()
 	defer s.pm.mu.Unlock()
 
 	for _, existingPeer := range s.pm.peers {
-		if existingPeer.Address != peerAddress {
+		if existingPeer.Address != peer.Address {
 			if typeMsg == "shutdown" {
-				go s.notifyShutdownPeer(existingPeer.Address, peerAddress)
+				go s.notifyShutdownPeer(existingPeer.Address, peer)
 			} else {
-				go s.notifyNewPeer(existingPeer.Address, peerAddress)
+				go s.notifyNewPeer(existingPeer.Address, peer)
 			}
 		}
 	}
 }
 
-func (s *Server) notifyNewPeer(existingPeer, newPeerAddress string) {
+func (s *Server) notifyNewPeer(existingPeer string, newPeer *Peer) {
 	conn, err := net.Dial("tcp", existingPeer)
 	if err != nil {
 		fmt.Println("Error notifying peer:", err)
@@ -124,16 +137,22 @@ func (s *Server) notifyNewPeer(existingPeer, newPeerAddress string) {
 	}
 	defer conn.Close()
 
+	data, err := sonic.Marshal(newPeer)
+	if err != nil {
+		fmt.Println("Error encoding peer:", err)
+		return
+	}
+
 	message := Message{
 		Type: NewPeerJoined,
-		Data: []byte(newPeerAddress),
+		Data: data,
 	}
-	data, _ := sonic.Marshal(message)
+	payload, _ := sonic.Marshal(message)
 
 	writer := bufio.NewWriter(conn)
-	data = append(data, '\n')
+	payload = append(payload, '\n')
 
-	_, err = writer.WriteString(string(data))
+	_, err = writer.WriteString(string(payload))
 	if err != nil {
 		fmt.Println("Gagal mengirim request:", err)
 		return
@@ -141,7 +160,7 @@ func (s *Server) notifyNewPeer(existingPeer, newPeerAddress string) {
 	writer.Flush()
 }
 
-func (s *Server) notifyShutdownPeer(existingPeer, newPeerAddress string) {
+func (s *Server) notifyShutdownPeer(existingPeer string, newPeer *Peer) {
 	conn, err := net.Dial("tcp", existingPeer)
 	if err != nil {
 		fmt.Println("Error notifying peer:", err)
@@ -149,16 +168,22 @@ func (s *Server) notifyShutdownPeer(existingPeer, newPeerAddress string) {
 	}
 	defer conn.Close()
 
+	data, err := sonic.Marshal(newPeer)
+	if err != nil {
+		fmt.Println("Error encoding peer:", err)
+		return
+	}
+
 	message := Message{
 		Type: ShutdownPeer,
-		Data: []byte(newPeerAddress),
+		Data: data,
 	}
-	data, _ := sonic.Marshal(message)
+	payload, _ := sonic.Marshal(message)
 
 	writer := bufio.NewWriter(conn)
-	data = append(data, '\n')
+	payload = append(payload, '\n')
 
-	_, err = writer.WriteString(string(data))
+	_, err = writer.WriteString(string(payload))
 	if err != nil {
 		fmt.Println("Gagal mengirim request:", err)
 		return

@@ -1,18 +1,20 @@
 package main
 
 import (
+	"bootstrap-server/internal/bootstrap"
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/bytedance/sonic"
 )
 
 type Request struct {
 	Type    string `json:"type"`
-	Payload string `json:"payload"`
+	Payload []byte `json:"payload"`
 }
 
 // Fungsi utama client untuk memanggil perintah registrasi, get peers, dan remove peer
@@ -60,9 +62,18 @@ func main() {
 // Fungsi untuk mengirim request dan membaca response dari server
 func sendRequest(conn net.Conn, command, peerAddress string) {
 	reader := bufio.NewReader(conn)
+	var peer *bootstrap.Peer = new(bootstrap.Peer)
+	peer.Address = peerAddress
+	peer.PublicKey = "public_key"
 
-	req := Request{Type: command, Payload: peerAddress}
-	data, err := json.Marshal(req)
+	payload, err := sonic.Marshal(peer)
+	if err != nil {
+		fmt.Println("gagal membuat payload JSON: ", err)
+		return
+	}
+
+	req := Request{Type: command, Payload: payload}
+	data, err := sonic.Marshal(req)
 	if err != nil {
 		fmt.Println("gagal membuat request JSON: ", err)
 		return
