@@ -2,14 +2,17 @@ package bootstrap
 
 import (
 	"bootstrap-server/internal/db"
+	"bootstrap-server/pkg"
 	"fmt"
 	"net"
+	"time"
 )
 
 // Server menyimpan data peer dan menangani koneksi.
 type Server struct {
-	port string
-	pm   *PeerManager
+	port      string
+	pm        *PeerManager
+	rateLimit *pkg.RateLimiter
 }
 
 // NewServer membuat instance baru server.
@@ -20,8 +23,9 @@ func NewServer(port, dbPath string) (*Server, error) {
 	}
 
 	return &Server{
-		port: port,
-		pm:   NewPeerManager(dbConn),
+		port:      port,
+		pm:        NewPeerManager(dbConn),
+		rateLimit: pkg.NewRateLimiter(100, time.Minute),
 	}, nil
 }
 
