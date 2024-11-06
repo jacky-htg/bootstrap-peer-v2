@@ -25,6 +25,17 @@ type Message struct {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	ip, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		fmt.Println("Failed to get IP address:", err)
+		return
+	}
+
+	if !s.rateLimit.Allow(ip) {
+		fmt.Println("Rate limit exceeded for IP:", ip)
+		return
+	}
+
 	reader := bufio.NewReader(conn)
 
 	// Baca request dari client
