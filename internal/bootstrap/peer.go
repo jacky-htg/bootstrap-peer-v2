@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bytedance/sonic"
 	"github.com/dgraph-io/badger/v4"
-	"google.golang.org/protobuf/proto"
 )
 
 // PeerManager mengelola daftar peers dengan thread-safe.
@@ -13,6 +13,11 @@ type PeerManager struct {
 	peers []*Peer
 	db    *badger.DB
 	mu    sync.Mutex
+}
+
+type Peer struct {
+	Address   string
+	PublicKey string
 }
 
 // NewPeerManager membuat instance baru dari PeerManager.
@@ -23,20 +28,19 @@ func NewPeerManager(db *badger.DB) *PeerManager {
 }
 
 // RegisterPeer menambahkan peer baru ke dalam daftar.
-func (pm *PeerManager) RegisterPeer(peerAddress string) (bool, string) {
+func (pm *PeerManager) RegisterPeer(peer Peer) (bool, string) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	for _, p := range pm.peers {
-		if p.Address == peerAddress {
+		if p.Address == peer.Address {
 			return false, "Peer already registered"
 		}
 	}
 
-	peer := Peer{Address: peerAddress}
 	pm.peers = append(pm.peers, &peer)
 
-	data, err := proto.Marshal(&peer)
+	data, err := sonic.Marshal(&peer)
 	if err != nil {
 		return false, fmt.Sprintf("Failed to serialize peer: %v", err)
 	}
@@ -95,7 +99,7 @@ func (pm *PeerManager) loadPeers() error {
 			item := iter.Item()
 			err := item.Value(func(val []byte) error {
 				var peer Peer
-				if err := proto.Unmarshal(val, &peer); err != nil {
+				if err := sonic.Unmarshal(val, &peer); err != nil {
 					return err
 				}
 				pm.peers = append(pm.peers, &peer)

@@ -52,30 +52,36 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	println(req.Type)
-	fmt.Println(req.Payload)
-
 	// Handle sesuai tipe request
 	switch req.Type {
 	case "REGISTER":
-		s.registerPeer(req.Payload.(string), conn)
+		s.registerPeer(req.Payload)
 	case "GET_PEERS":
 		s.getAllPeers(conn)
 	case "REMOVE":
-		s.removePeer(req.Payload.(string), conn)
+		s.removePeer(req.Payload)
 	default:
 		fmt.Println("Invalid request type")
 	}
 }
 
 // registerPeer menambahkan peer baru ke daftar.
-func (s *Server) registerPeer(peer string, conn net.Conn) {
-	success, msg := s.pm.RegisterPeer(peer)
-	fmt.Fprintln(conn, msg)
+func (s *Server) registerPeer(peer []byte) {
+	var myPeer Peer
+	err := sonic.Unmarshal(peer, &myPeer)
+	if err != nil {
+		fmt.Println("Failed to unmarshall peer:")
+		return
+	}
+
+	fmt.Println(myPeer)
+
+	success, _ := s.pm.RegisterPeer(myPeer)
 
 	if !success {
 		fmt.Println("Failed to register peer:", peer)
 	} else {
-		s.broadcastPeers(peer, "register")
+		s.broadcastPeers(myPeer, "register")
 	}
 }
 
@@ -90,33 +96,38 @@ func (s *Server) getAllPeers(conn net.Conn) {
 	conn.Write(append(data, '\n'))
 }
 
-func (s *Server) removePeer(peer string, conn net.Conn) {
-	success, msg := s.pm.RemovePeer(peer)
-	fmt.Fprintln(conn, msg)
+func (s *Server) removePeer(peer []byte) {
+	var curPeer Peer
+	err := sonic.Unmarshal(peer, &curPeer)
+	if err != nil {
+		fmt.Println("Failed to unmarshall peer:")
+		return
+	}
+	success, _ := s.pm.RemovePeer(curPeer.Address)
 
 	if !success {
 		fmt.Println("Failed to remove peer:", peer)
 	} else {
-		s.broadcastPeers(peer, "shutdown")
+		s.broadcastPeers(curPeer, "shutdown")
 	}
 }
 
-func (s *Server) broadcastPeers(peerAddress, typeMsg string) {
+func (s *Server) broadcastPeers(peer Peer, typeMsg string) {
 	s.pm.mu.Lock()
 	defer s.pm.mu.Unlock()
 
 	for _, existingPeer := range s.pm.peers {
-		if existingPeer.Address != peerAddress {
+		if existingPeer.Address != peer.Address {
 			if typeMsg == "shutdown" {
-				go s.notifyShutdownPeer(existingPeer.Address, peerAddress)
+				go s.notifyShutdownPeer(existingPeer.Address, peer.Address)
 			} else {
-				go s.notifyNewPeer(existingPeer.Address, peerAddress)
+				go s.notifyNewPeer(existingPeer.Address, peer)
 			}
 		}
 	}
 }
 
-func (s *Server) notifyNewPeer(existingPeer, newPeerAddress string) {
+func (s *Server) notifyNewPeer(existingPeer string, newPeer Peer) {
 	conn, err := net.Dial("tcp", existingPeer)
 	if err != nil {
 		fmt.Println("Error notifying peer:", err)
@@ -124,12 +135,17 @@ func (s *Server) notifyNewPeer(existingPeer, newPeerAddress string) {
 	}
 	defer conn.Close()
 
+	newPeerdata, err := sonic.Marshal(newPeer)
+	if err != nil {
+		fmt.Println("Failed to serialize new peer:", err)
+		return
+	}
+
 	message := Message{
 		Type: NewPeerJoined,
-		Data: []byte(newPeerAddress),
+		Data: newPeerdata,
 	}
 	data, _ := sonic.Marshal(message)
-
 	writer := bufio.NewWriter(conn)
 	data = append(data, '\n')
 
